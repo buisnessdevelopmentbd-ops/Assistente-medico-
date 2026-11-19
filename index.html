@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>connectUS Live</title>
+<style>
+:root{--fs:26px;--client:#3B82F6;--lep:#EF4444;--ink:#f1f5f9;--mute:#94a3b8}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:var(--ink);
+background:linear-gradient(135deg,#0f172a 0%,#1e1b4b 40%,#0c4a6e 75%,#064e3b 100%);overflow:hidden}
+.bgword{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+font-size:clamp(80px,18vw,260px);font-weight:900;color:rgba(255,255,255,.04);pointer-events:none;letter-spacing:-.04em}
+.app{position:relative;height:100%;display:grid;grid-template-columns:1fr 300px;grid-template-rows:auto 1fr}
+header{grid-column:1/3;display:flex;gap:12px;align-items:center;justify-content:space-between;padding:12px 20px;
+background:rgba(15,23,42,.6);backdrop-filter:blur(8px);border-bottom:1px solid rgba(255,255,255,.08);flex-wrap:wrap}
+h1{font-size:18px}h1 small{font-size:11px;color:#6ee7b7;border:1px solid #065f46;padding:2px 8px;border-radius:99px;margin-left:8px;font-weight:600}
+.row{display:flex;gap:8px;align-items:center}
+button{font:inherit;cursor:pointer;border:0;border-radius:10px;padding:8px 14px;color:#fff;background:#334155;font-size:14px;font-weight:600}
+button:hover{filter:brightness(1.2)}
+.go{background:#0891b2}.stop{background:#e11d48}
+.sz button{padding:6px 10px;background:rgba(255,255,255,.1)}.sz button.on{background:#0891b2}
+.status{font-size:12px;color:var(--mute);padding:6px 12px;background:rgba(255,255,255,.07);border-radius:99px}
+#feed{overflow-y:auto;padding:20px 28px;display:flex;flex-direction:column;gap:18px}
+.msg{border-left:6px solid var(--client);padding:4px 0 4px 18px}
+.msg.es{border-color:var(--lep)}
+.who{font-size:12px;letter-spacing:.1em;font-weight:800;color:var(--client)}.es .who{color:var(--lep)}
+.who span{color:var(--mute);font-weight:500;margin-left:8px}
+.tr{font-size:var(--fs);font-weight:600;line-height:1.3;margin-top:2px}
+.or{font-size:calc(var(--fs)*.55);color:var(--mute);margin-top:4px}
+.live{font-size:calc(var(--fs)*.7);color:var(--mute);font-style:italic}
+.empty{margin:auto;text-align:center;color:var(--mute);max-width:420px;line-height:1.6}
+aside{padding:16px;overflow-y:auto;background:rgba(15,23,42,.45);border-left:1px solid rgba(255,255,255,.08)}
+aside h2{font-size:14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+aside h2 button{padding:4px 8px;font-size:12px}
+.term{background:rgba(255,255,255,.06);border-radius:10px;padding:10px;margin-bottom:8px;font-size:13px}
+.term b{color:#67e8f9}.term div{color:var(--mute);margin-top:2px}
+.paused{position:fixed;top:70px;right:330px;background:#f59e0b;color:#000;padding:4px 12px;border-radius:99px;font-weight:700;font-size:12px;display:none}
+@media(max-width:800px){.app{grid-template-columns:1fr}aside{display:none}header{grid-column:1}}
+</style>
+</head>
+<body>
+<div class="bgword">connectUS</div>
+<div class="paused" id="paused">PAUSA</div>
+<div class="app">
+<header>
+  <h1>connectUS Live<small>Sin almacenamiento</small></h1>
+  <div class="row">
+    <div class="sz" id="sz"><button data-s="20">S</button><button data-s="26" class="on">M</button><button data-s="32">L</button><button data-s="40">XL</button></div>
+    <span class="status" id="status">Desconectado</span>
+    <button class="go" id="start">Capturar audio</button>
+    <button class="stop" id="stop" style="display:none">Finalizar y borrar</button>
+  </div>
+</header>
+<main id="feed"><div class="empty" id="empty">Pulsa <b>Capturar audio</b>, elige la pestaña de la llamada y marca <b>Compartir audio de la pestaña</b>.<br>Tu micrófono no se usa, así que tu voz no se transcribe.</div></main>
+<aside>
+  <h2>Vocabulario <span><button id="exp">Exportar</button> <button id="clr">Limpiar</button></span></h2>
+  <div id="vocab"><div style="color:var(--mute);font-size:12px">Las siglas detectadas aparecen aquí.</div></div>
+</aside>
+</div>
+<script>
+const GLOSSARY={
+EOB:['Explanation of Benefits','Explicación de Beneficios'],
+PCP:['Primary Care Physician','Médico de Atención Primaria'],
+OOP:['Out-of-Pocket Maximum','Gasto Máximo de Bolsillo'],
+DME:['Durable Medical Equipment','Equipo Médico Duradero'],
+CPS:['Child Protective Services','Servicios de Protección Infantil'],
+MRI:['Magnetic Resonance Imaging','Resonancia Magnética'],
+ER:['Emergency Room','Sala de Emergencias'],
+SNF:['Skilled Nursing Facility','Centro de Enfermería Especializada'],
+FNOL:['First Notice of Loss','Primer Aviso de Siniestro'],
+POA:['Power of Attorney','Poder Notarial'],
+HIPAA:['Health Insurance Portability and Accountability Act','Ley de Portabilidad y Responsabilidad del Seguro Médico']};
+// Si la página y el servidor están en el mismo sitio, déjalo vacío.
+// Si la página está en Netlify, pon aquí la dirección del servidor (ej. 'wss://connectus-live.onrender.com').
+const BACKEND_WS='';
+const WS_URL=new URLSearchParams(location.search).get('server')||BACKEND_WS||
+  ((location.protocol==='https:'?'wss':'ws')+'://'+location.host);
+const $=id=>document.getElementById(id);
+const feed=$('feed'),vocab=$('vocab');
+let ws,rec,stream,paused=false,queue=[],live=null,terms={};
+
+const clean=t=>t.replace(/\b(um+|uh+|you know|este+|o sea|eh+)\b[,.]?\s*/gi,'').replace(/\s+/g,' ').trim();
+
+function scan(text){
+  let found=false;
+  for(const k in GLOSSARY){
+    if(new RegExp('\\b'+k+'\\b').test(text)){terms[k]=GLOSSARY[k];found=true;}
+  }
+  if(found)renderVocab();
+}
+function renderVocab(){
+  vocab.innerHTML='';
+  Object.entries(terms).forEach(([k,[en,es]])=>{
+    const d=document.createElement('div');d.className='term';
+    d.innerHTML='<b></b><div></div><div></div>';
+    d.children[0].textContent=k;d.children[1].textContent=en;d.children[2].textContent=es;
+    vocab.appendChild(d);
+  });
+}
+const lines={};
+function openLine(d){
+  $('empty')?.remove();
+  const es=d.lang==='es';
+  const el=document.createElement('div');el.className='msg'+(es?' es':'');
+  el.innerHTML='<div class="who"></div><div class="tr"></div><div class="or"></div>';
+  el.children[0].innerHTML=(es?'LEP · ESPAÑOL':'CLIENT · ENGLISH')+'<span></span>';
+  el.children[0].firstElementChild.textContent=d.timestamp;
+  if(live)feed.insertBefore(el,live);else feed.appendChild(el);
+  lines[d.id]={el,tr:'',or:''};
+}
+const toBottom=()=>{if(!paused)feed.scrollTop=feed.scrollHeight;};
+function onMsg(d){
+  const L=lines[d.id];
+  if(d.type==='INTERIM')showLive(d.text);
+  else if(d.type==='LINE_OPEN')openLine(d);
+  else if(d.type==='ORIG'&&L){showLive('');L.or+=(L.or?' ':'')+d.text;L.el.children[2].textContent=L.or;toBottom();}
+  else if(d.type==='TRANS_DELTA'&&L){L.tr+=d.text;L.el.children[1].textContent=L.tr.replace(/\s+/g,' ').trimStart();toBottom();}
+  else if(d.type==='LINE_END'&&L)scan(L.or+' '+L.tr);
+}
+function showLive(t){
+  if(paused)return;
+  if(!live){live=document.createElement('div');live.className='live';feed.appendChild(live);}
+  live.textContent=t?'…'+clean(t):'';
+  if(!t){live.remove();live=null;}
+  feed.scrollTop=feed.scrollHeight;
+}
+function setPaused(p){
+  paused=p;$('paused').style.display=p?'block':'none';
+  if(!p)feed.scrollTop=feed.scrollHeight;
+}
+document.addEventListener('keydown',e=>{if(e.code==='Space'&&e.target.tagName!=='BUTTON'){e.preventDefault();setPaused(!paused);}});
+
+$('sz').onclick=e=>{const s=e.target.dataset.s;if(!s)return;
+  document.documentElement.style.setProperty('--fs',s+'px');
+  [...$('sz').children].forEach(b=>b.classList.toggle('on',b===e.target));};
+
+$('start').onclick=async()=>{
+  try{
+    const ds=await navigator.mediaDevices.getDisplayMedia({video:true,audio:{echoCancellation:false,noiseSuppression:false}});
+    ds.getVideoTracks().forEach(t=>t.stop());
+    const at=ds.getAudioTracks();
+    if(!at.length){alert('Marca "Compartir audio de la pestaña" al elegir la pestaña.');return;}
+    stream=new MediaStream(at);
+    ws=new WebSocket(WS_URL);
+    ws.onopen=()=>{
+      $('status').textContent='En línea';$('start').style.display='none';$('stop').style.display='';
+      rec=new MediaRecorder(stream,{mimeType:'audio/webm'});
+      rec.ondataavailable=ev=>{if(ev.data.size>0&&ws.readyState===1)ws.send(ev.data);};
+      rec.start(200);
+    };
+    ws.onmessage=ev=>onMsg(JSON.parse(ev.data));
+    ws.onclose=()=>{$('status').textContent='Desconectado';$('start').style.display='';$('stop').style.display='none';};
+  }catch(e){console.error(e);}
+};
+$('stop').onclick=()=>{
+  rec&&rec.state!=='inactive'&&rec.stop();
+  stream&&stream.getTracks().forEach(t=>t.stop());
+  ws&&ws.close();
+  feed.innerHTML='';for(const k in lines)delete lines[k];live=null;terms={};renderVocab();
+  $('status').textContent='Sesión borrada';
+};
+$('clr').onclick=()=>{terms={};vocab.innerHTML='';};
+$('exp').onclick=()=>{
+  const rows=Object.entries(terms).map(([k,[en,es]])=>`${k}: ${en} | ${es}`);
+  if(!rows.length)return;
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['VOCABULARIO DE ESTUDIO\n\n'+rows.join('\n')],{type:'text/plain'}));
+  a.download='vocabulario_'+new Date().toISOString().slice(0,10)+'.txt';a.click();
+};
+</script>
+</body>
+</html>
